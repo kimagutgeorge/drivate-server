@@ -2490,6 +2490,7 @@ def save_blog():
                 'message': "Blog saved",
             }), 200
             
+        
         except Exception as db_error:
             db.session.rollback()
             return jsonify({
@@ -2806,3 +2807,190 @@ def delete_faq():
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error':'Failed to delete faq'}), 500
+    
+
+# get vehicle names
+@app.route('/get-vehicle-names', methods=['GET'])
+def get_vehicle_names():
+   
+    try:
+        cars = Cars.query.all()
+        # Build response
+        vehicle_names = []
+        for car in cars:
+            vehicle_data = {
+                "car_id": car.car_id,
+                "name": car.name,
+            }
+            vehicle_names.append(vehicle_data)
+        
+        return jsonify({
+            "success": True,
+            "vehicle_names": vehicle_names,
+        }), 200
+        
+    except Exception as e:
+        print(f"Error retrieving vehicles: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"Error retrieving vehicle names: {str(e)}"
+        }), 500
+
+
+# add review
+@app.route('/add-review', methods = ['POST'])
+def add_review():
+    try:
+        car_id = request.form.get('car_id')
+        title = request.form.get('title')
+        rating = request.form.get('rating')
+        review = request.form.get('review')
+        reviewer = request.form.get('reviewer')
+
+        if not rating:
+            rating = 0
+
+        image_filename = None
+        if 'image' in request.files:
+            image_file = request.files['image']
+
+            if image_file and image_file.filename != '':
+                try:
+                    # Process the image
+                        processed_filenames = process_images(
+                            image_files=image_file,
+                            destination_folder=REVIEWS_FOLDER,
+                            max_width=1920,
+                            max_height=1080,
+                            quality=85
+                        )
+                        
+                        if processed_filenames and len(processed_filenames) > 0:
+                            image_filename = processed_filenames[0]
+                        else:
+                            return jsonify({'message': 'Failed to process image'}), 500
+                            
+                except ValueError as ve:
+                    return jsonify({'success': False,'message': f'Image validation error'}), 400
+                except Exception as e:
+                    print(f"Error processing image: {e}")
+                    return jsonify({'success': False,'message': 'Error processing image'}), 500
+                
+        # save review
+        new_review = Reviews(
+            title = title,
+            rating = rating,
+            reviewer = reviewer,
+            text = review,
+            image = image_filename,
+            car_id = car_id,
+        )
+        db.session.add(new_review)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Thank you for your review',
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': 'Failed. Unexpected error occurred.',
+            'details': str(e)
+        }), 200
+
+# get reviews
+@app.route('/get-reviews/<review_status>', methods = ['GET'])
+def get_reviews(review_status):
+    try:
+        all_reviews = []
+
+        if(review_status == 'all'):
+            reviews = Reviews.query.all()
+
+            for review in reviews:
+                vehicle  = Cars.query.filter_by(car_id = review.car_id).first()
+                car_name = vehicle.name
+                
+                # review image
+                review_image = url_for('static', filename = f'images/reviews/{review.image}', _external=True)
+                
+                review_data = {
+                    'review_id': review.review_id,
+                    'title': review.title,
+                    'rating': review.rating,
+                    'reviewer': review.reviewer,
+                    'date': review.date.isoformat(),
+                    'review': review.text,
+                    'image': review_image,
+                    'status': review.status,
+                    'car_id' : review.car_id,
+                    'car_name': car_name,
+                }
+
+                all_reviews.append(review_data)
+
+        else:
+            reviews = Reviews.query.filter_by(status = review_status).all()
+
+            for review in reviews:
+                vehicle  = Cars.query.filter_by(car_id = review.car_id).first()
+                car_name = vehicle.name
+
+                # review image
+                review_image = url_for('static', filename = f'images/reviews/{review.image}', _external=True)
+                
+                review_data = {
+                    'review_id': review.review_id,
+                    'title': review.title,
+                    'rating': review.rating,
+                    'reviewer': review.reviewer,
+                    'date': review.date.isoformat(),
+                    'review': review.text,
+                    'image': review_image,
+                    'status': review.status,
+                    'car_id' : review.car_id,
+                    'car_name': car_name,
+                }
+
+                all_reviews.append(review_data)
+
+        return jsonify({
+            'success': True,
+            'reviews': all_reviews
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': 'Failed. Unexpected error occured.',
+            'details': str(e)
+        }), 200
+
+# toggle review status
+@app.route('/toggle-review', methods = ['POST'])
+def toggle_review():
+    try:
+        review_id = request.form.get('review_id')
+
+        fetched_review = Reviews.query.filter_by(review_id = review_id).first()
+
+        if fetched_review.status == 'Active':
+            fetched_review.status = 'Inactive'
+        else: 
+            fetched_review.status = 'Active'
+
+        db.session.commit()
+        return({
+            'success': True,
+            'message': 'Review status updated'
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': 'Failed. Unexpected error occured',
+            'details': str(e)
+        }), 200

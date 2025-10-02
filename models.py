@@ -162,12 +162,13 @@ class Reviews(db.Model):
     review_id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     rating = db.Column(db.Integer, nullable=False)
-    reviewer = db.Column(db.String(100), nullable=False)
+    reviewer = db.Column(db.String(100))
     date = db.Column(db.DateTime, default=datetime.utcnow)
     text = db.Column(db.Text, nullable=False)
     image = db.Column(db.String(255))
     car_id = db.Column(db.Integer, db.ForeignKey('cars.car_id'))
-    status = db.Column(db.String(10), default = "Active")
+    status = db.Column(db.String(10), default = "Inactive")
+    
     
     def to_dict(self):
         return {
