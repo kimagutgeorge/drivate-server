@@ -904,6 +904,140 @@ def get_categories():
             'error': 'Failed to fetch categories'
         }), 500
     
+# get contact us
+@app.route('/get-contact-us/<status>', methods = ['GET'])
+def get_contact_us(status):
+    try:
+        if status == 'all':
+            contacts_us_enquiries = ContactUs.query.order_by(ContactUs.contact_id.desc()).all()
+            
+            enquiry_list = [enquiry.to_dict() for enquiry in contacts_us_enquiries]
+
+            return jsonify({
+                'success': True,
+                'enquiries': enquiry_list,
+            }), 200
+        
+        else:
+            contacts_us_enquiries = ContactUs.query.filter_by(status = status).order_by(ContactUs.contact_id.desc()).all()
+            
+            enquiry_list = [enquiry.to_dict() for enquiry in contacts_us_enquiries]
+
+            return jsonify({
+                'success': True,
+                'enquiries': enquiry_list,
+            }), 200
+    
+    except Exception as e:
+        print("Error fetching contact enquiries: ", str(e))
+        return jsonify({
+            'success': False,
+            'error': 'Failed. An unexpected error occured',
+            'details': str(e)
+        }), 500
+    
+# get enquiries
+@app.route('/get-enquiries/<mode>', methods = ['GET'])
+def get_enquiries(mode):
+    try:
+        if mode == 'all':
+            enquiries = Enquiries.query.order_by(Enquiries.enquiry_id.desc()).all()
+            
+            enquiry_list = [enquiry.to_dict() for enquiry in enquiries]
+
+            return jsonify({
+                'success': True,
+                'enquiries': enquiry_list,
+            }), 200
+        
+        else:
+            enquiries = Enquiries.query.filter_by(status = mode).order_by(Enquiries.enquiry_id.desc()).all()
+            
+            enquiry_list = [enquiry.to_dict() for enquiry in enquiries]
+
+            return jsonify({
+                'success': True,
+                'enquiries': enquiry_list,
+            }), 200
+    
+    except Exception as e:
+        print("Error fetching enquiries: ", str(e))
+        return jsonify({
+            'success': False,
+            'error': 'Failed. An unexpected error occured',
+            'details': str(e)
+        }), 500
+
+# add contact 
+@app.route('/add-contact-us', methods = ['POST'])
+def add_contact_us():
+    try:
+        full_name = request.form.get('name')
+        phone = request.form.get('phone')
+        email = request.form.get('email')
+        message = request.form.get('message')
+
+        new_contact = ContactUs(
+            full_name = full_name,
+            phone = phone,
+            email = email,
+            message = message
+        )
+
+        db.session.add(new_contact)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Thank you. We will get back to you soon'
+        }), 200
+    
+    except Exception as e:
+        print("Error sending contact enquiry: ", str(e))
+        return jsonify({
+            'success': False,
+            'error': 'Failed. An unexpected error occurred',
+            'details': str(e)
+        })
+
+# add enquiry 
+@app.route('/save-enquiry', methods = ['POST'])
+def save_enquiry():
+    try:
+        client_name = request.form.get('client_name')
+        client_email = request.form.get('client_email')
+        car_name = request.form.get('car_name')
+        client_phone = request.form.get('client_phone')
+        client_address = request.form.get('client_address')
+        client_message = request.form.get('client_message')
+        mode = request.form.get('mode')
+
+        new_enquiry = Enquiries(
+            name = client_name,
+            email = client_email,
+            car = car_name,
+            phone = client_phone,
+            address = client_address,
+            message = client_message,
+            enquiry_mode = mode
+        )
+
+        db.session.add(new_enquiry)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Thank you. We will get back to you soon'
+        }), 200
+    
+    except Exception as e:
+        print("Error saving contact enquiry: ", str(e))
+        return jsonify({
+            'success': False,
+            'error': 'Failed. An unexpected error occurred',
+            'details': str(e)
+        })
+
 # fetch faqs categories
 @app.route('/get-faq-categories', methods=['GET'])
 def get_faqs_categories():
@@ -2905,17 +3039,25 @@ def add_review():
 def get_reviews(review_status):
     try:
         all_reviews = []
+        average_rating = 0
 
-        if(review_status == 'all'):
+        if review_status == 'all':
             reviews = Reviews.query.all()
 
+            total_rating = 0
+            count = 0
+
             for review in reviews:
-                vehicle  = Cars.query.filter_by(car_id = review.car_id).first()
-                car_name = vehicle.name
-                
+                vehicle = Cars.query.filter_by(car_id=review.car_id).first()
+                car_name = vehicle.name if vehicle else None
+
                 # review image
-                review_image = url_for('static', filename = f'images/reviews/{review.image}', _external=True)
-                
+                review_image = url_for(
+                    'static',
+                    filename=f'images/reviews/{review.image}',
+                    _external=True
+                )
+
                 review_data = {
                     'review_id': review.review_id,
                     'title': review.title,
@@ -2925,22 +3067,36 @@ def get_reviews(review_status):
                     'review': review.text,
                     'image': review_image,
                     'status': review.status,
-                    'car_id' : review.car_id,
+                    'car_id': review.car_id,
                     'car_name': car_name,
                 }
 
                 all_reviews.append(review_data)
+
+                
+                if review.rating is not None:
+                    total_rating += review.rating
+                    count += 1
+
+            average_rating = total_rating / count if count > 0 else 0
+
 
         else:
             reviews = Reviews.query.filter_by(status = review_status).all()
+            total_rating = 0
+            count = 0
 
             for review in reviews:
-                vehicle  = Cars.query.filter_by(car_id = review.car_id).first()
-                car_name = vehicle.name
+                vehicle = Cars.query.filter_by(car_id=review.car_id).first()
+                car_name = vehicle.name if vehicle else None
 
                 # review image
-                review_image = url_for('static', filename = f'images/reviews/{review.image}', _external=True)
-                
+                review_image = url_for(
+                    'static',
+                    filename=f'images/reviews/{review.image}',
+                    _external=True
+                )
+
                 review_data = {
                     'review_id': review.review_id,
                     'title': review.title,
@@ -2950,15 +3106,23 @@ def get_reviews(review_status):
                     'review': review.text,
                     'image': review_image,
                     'status': review.status,
-                    'car_id' : review.car_id,
+                    'car_id': review.car_id,
                     'car_name': car_name,
                 }
 
                 all_reviews.append(review_data)
 
+                
+                if review.rating is not None:
+                    total_rating += review.rating
+                    count += 1
+
+            average_rating = total_rating / count if count > 0 else 0
+
         return jsonify({
             'success': True,
-            'reviews': all_reviews
+            'reviews': all_reviews,
+            'average_rating': average_rating
         })
 
     except Exception as e:
@@ -2988,6 +3152,155 @@ def toggle_review():
             'message': 'Review status updated'
         })
     
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': 'Failed. Unexpected error occured',
+            'details': str(e)
+        }), 200
+
+
+# mark message as read
+@app.route('/mark-as-read', methods = ['POST'])
+def mark_as_read():
+    try:
+        message_id = request.form.get("id")
+        existing_message = ContactUs.query.get(message_id)
+
+        if not existing_message:
+            return jsonify({
+                'success': False,
+                'error': 'Enquiry not found'
+            }), 200
+        
+        else: 
+            existing_message.status = 'Read'
+            db.session.commit()
+
+
+            return jsonify({
+                'success': True,
+                'message': "Enquiry marked as read"
+            }), 200
+
+    except Exception as e:
+        print("Error marking message as read: ", str(e))
+        return jsonify({
+            'success': False,
+            'error': "Failed. Unexpected error occured",
+            'details': str(e)
+        }), 500
+    
+
+# mark message as read
+@app.route('/mark-enquiry-as-read', methods = ['POST'])
+def mark_enquiry_as_read():
+    try:
+        message_id = request.form.get("id")
+        existing_message = Enquiries.query.get(message_id)
+
+        if not existing_message:
+            return jsonify({
+                'success': False,
+                'error': 'Enquiry not found'
+            }), 200
+        
+        else: 
+            existing_message.status = 'Read'
+            db.session.commit()
+
+
+            return jsonify({
+                'success': True,
+                'message': "Enquiry marked as read"
+            }), 200
+
+    except Exception as e:
+        print("Error marking message as read: ", str(e))
+        return jsonify({
+            'success': False,
+            'error': "Failed. Unexpected error occured",
+            'details': str(e)
+        }), 500
+
+# delete contact enquiry
+@app.route('/del-contact-us', methods = ['POST'])
+def del_contact_us():
+    try:
+        message_id = request.form.get('id')
+        message = ContactUs.query.get(message_id)
+        
+        if not message:
+            return jsonify({
+                'success': False,
+                'error': 'Message not found'
+            }), 200
+        
+        else:
+            db.session.delete(message)
+            db.session.commit()
+
+            return jsonify({
+                'success': True,
+                'message': 'Enquiry deleted'
+            }), 200
+
+    except Exception as e:
+        print("Error deleting contact enquiry: ", str(e))
+        return jsonify({
+            'success': False,
+            'error': 'Failed. An unexpected error occured'
+        }), 500
+
+
+# delete contact enquiry
+@app.route('/del-enquiry', methods = ['POST'])
+def del_enquiry():
+    try:
+        message_id = request.form.get('id')
+        message = Enquiries.query.get(message_id)
+        
+        if not message:
+            return jsonify({
+                'success': False,
+                'error': 'Enquiry not found'
+            }), 200
+        
+        else:
+            db.session.delete(message)
+            db.session.commit()
+
+            return jsonify({
+                'success': True,
+                'message': 'Enquiry deleted'
+            }), 200
+
+    except Exception as e:
+        print("Error deleting contact enquiry: ", str(e))
+        return jsonify({
+            'success': False,
+            'error': 'Failed. An unexpected error occured'
+        }), 500
+
+# delete review
+@app.route('/del-review', methods = ['POST'])
+def del_review():
+    try:
+        review_id = request.form.get('id')
+
+        if not review_id:
+            return jsonify({'success': False, 'error': 'Review ID is required'}), 200
+        
+        else:
+            review = Reviews.query.get(review_id)
+            db.session.delete(review)
+            db.session.commit()
+
+            return jsonify({
+                'success': True,
+                'message': 'Review deleted',
+            }), 200
+
     except Exception as e:
         return jsonify({
             'success': False,

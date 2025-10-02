@@ -251,6 +251,51 @@ class Contact(db.Model):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
+
+class ContactUs(db.Model):
+    __tablename__ = 'contact_us'
+    contact_id = db.Column(db.Integer, primary_key = True, autoincrement = True)
+    full_name = db.Column(db.String(100), nullable = False)
+    phone = db.Column(db.Integer, nullable = False)
+    email = db.Column(db.String(100))
+    message = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(15), default='Unread')
+
+    def to_dict(self):
+        return{
+            'contact_id': self.contact_id,
+            'name': self.full_name,
+            'phone': self.phone,
+            'email': self.email,
+            'message': self.message,
+            'status' : self.status,
+        }
+
+class Enquiries(db.Model):
+    __tablename__ = 'enquiries'
+    enquiry_id = db.Column(db.Integer, primary_key = True, autoincrement = True)
+    name = db.Column(db.String(100), nullable = False)
+    email = db.Column(db.String(150), nullable = False)
+    car = db.Column(db.String(255), nullable = False)
+    phone = db.Column(db.Integer, nullable = False)
+    address = db.Column(db.String(255), nullable = False)
+    message = db.Column(db.Text)
+    enquiry_mode = db.Column(db.String(20))
+    status = db.Column(db.String(15), default='Unread')
+
+    def to_dict(self):
+        return{
+            'enquiry_id': self.enquiry_id,
+            'name': self.name,
+            'email' :self.email,
+            'car' :self.car,
+            'phone' :self.phone,
+            'address' :self.address,
+            'message' :self.message,
+            'enquiry_mode': self.enquiry_mode,
+            'status': self.status
+        }
+
 class CompanyInfo(db.Model):
     __tablename__ = 'company_info'
     info_id = db.Column(db.Integer, primary_key=True)
