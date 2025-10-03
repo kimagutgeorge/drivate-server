@@ -840,7 +840,7 @@ def del_model():
 def get_features():
     try:
         # Get all features from database
-        features = Features.query.all()
+        features = Features.query.order_by(Features.feature_id.desc()).all()
         
         # Convert to dictionary format
         features_list = [feature.to_dict() for feature in features]
@@ -863,7 +863,7 @@ def get_features():
 def get_locations():
     try:
         # Get all features from database
-        locations = Locations.query.all()
+        locations = Locations.query.order_by(Locations.location_id.desc()).all()
         
         # Convert to dictionary format
         location_list = [location.to_dict() for location in locations]
@@ -905,11 +905,16 @@ def get_categories():
         }), 500
     
 # get contact us
-@app.route('/get-contact-us/<status>', methods = ['GET'])
-def get_contact_us(status):
+@app.route('/get-contact-us/<status>/<web_enquiries>', methods = ['GET'])
+def get_contact_us(status, web_enquiries):
     try:
         if status == 'all':
-            contacts_us_enquiries = ContactUs.query.order_by(ContactUs.contact_id.desc()).all()
+            contacts_us_enquiries = []
+            if web_enquiries == 'web_enquiries':
+                contacts_us_enquiries = ContactUs.query.filter_by(contact_type = 'Contact').order_by(ContactUs.contact_id.desc()).all()
+
+            else:
+                contacts_us_enquiries = ContactUs.query.filter_by(contact_type = 'Import').order_by(ContactUs.contact_id.desc()).all()
             
             enquiry_list = [enquiry.to_dict() for enquiry in contacts_us_enquiries]
 
@@ -919,7 +924,19 @@ def get_contact_us(status):
             }), 200
         
         else:
-            contacts_us_enquiries = ContactUs.query.filter_by(status = status).order_by(ContactUs.contact_id.desc()).all()
+            contacts_us_enquiries = []
+
+            if web_enquiries == 'imports':
+                contacts_us_enquiries = ContactUs.query.filter(
+                    ContactUs.status == status,
+                    ContactUs.contact_type == 'Import'
+                    ).order_by(ContactUs.contact_id.desc()).all()
+
+            else:
+                contacts_us_enquiries = ContactUs.query.filter(
+                    ContactUs.status == status,
+                    ContactUs.contact_type == 'Contact'
+                    ).order_by(ContactUs.contact_id.desc()).all()
             
             enquiry_list = [enquiry.to_dict() for enquiry in contacts_us_enquiries]
 
@@ -976,13 +993,24 @@ def add_contact_us():
         phone = request.form.get('phone')
         email = request.form.get('email')
         message = request.form.get('message')
-
-        new_contact = ContactUs(
-            full_name = full_name,
-            phone = phone,
-            email = email,
-            message = message
-        )
+        subject = request.form.get('subject')
+        
+        if subject:
+            new_contact = ContactUs(
+                full_name = full_name,
+                phone = phone,
+                email = email,
+                message = message,
+                contact_type = 'Import'
+            )
+        
+        else:
+            new_contact = ContactUs(
+                full_name = full_name,
+                phone = phone,
+                email = email,
+                message = message
+            )
 
         db.session.add(new_contact)
         db.session.commit()
@@ -3307,3 +3335,307 @@ def del_review():
             'error': 'Failed. Unexpected error occured',
             'details': str(e)
         }), 200
+
+
+# Add vehicle to sell
+@app.route('/add-vehicle-to-sell', methods=['POST'])
+def add_vehicle_to_sell():
+    try:
+        # Get form data
+        full_name = request.form.get('full_name')
+        phone = request.form.get('phone')
+        email = request.form.get('email')
+        location = request.form.get('location')
+        make_id = request.form.get('make_id')
+        model_id = request.form.get('model_id')
+        year = request.form.get('year')
+        mileage = request.form.get('mileage')
+        price = request.form.get('price')
+        fuel_type = request.form.get('fuel_type')
+        body_id = request.form.get('body_id')
+        transmission = request.form.get('transmission')
+        color = request.form.get('color')
+        steering = request.form.get('steering')
+        drive_type = request.form.get('drive_type')
+        description = request.form.get('description', '')
+        features_json = request.form.get('features')
+        
+        # Validate required fields
+        required_fields = {
+            'full_name': full_name,
+            'phone': phone,
+            'email': email,
+            'location': location,
+            'make_id': make_id,
+            'model_id': model_id,
+            'year': year,
+            'price': price,
+            'body_id': body_id
+        }
+        
+        for field, value in required_fields.items():
+            if not value:
+                return jsonify({
+                    'success': False,
+                    'message': f'{field.replace("_", " ").title()} is required'
+                }), 400
+        
+        # Get uploaded images
+        images = request.files.getlist('images')
+        
+        if not images or len(images) == 0:
+            return jsonify({
+                'success': False,
+                'message': 'At least one image is required'
+            }), 400
+        
+        if len(images) > 6:
+            return jsonify({
+                'success': False,
+                'message': 'Maximum 6 images allowed'
+            }), 400
+        
+        # Validate image sizes (3MB each)
+        max_size = 3 * 1024 * 1024  # 3MB in bytes
+        for img in images:
+            if img.filename == '':
+                return jsonify({
+                    'success': False,
+                    'message': 'Invalid image file'
+                }), 400
+            
+            # Check file size
+            img.seek(0, 2)  # Seek to end
+            size = img.tell()
+            img.seek(0)  # Reset to beginning
+            
+            if size > max_size:
+                return jsonify({
+                    'success': False,
+                    'message': f'Image {img.filename} exceeds 3MB size limit'
+                }), 400
+        
+        # First, create a Selling record
+        new_selling = Selling(
+            seller=full_name,
+            phone_number=phone,
+            email=email,
+            location=int(location),
+            status='pending'
+        )
+        db.session.add(new_selling)
+        db.session.flush()  # Get the ID without committing
+        
+        # Create car details record
+        new_car_details = CarToSellDetails(
+            selling_id=new_selling.sell_id,
+            make=int(make_id),
+            model=int(model_id),
+            year=int(year),
+            mileage=mileage,
+            selling_price=float(price),
+            fuel_type=fuel_type,
+            body_type=int(body_id),
+            transmission=transmission,
+            steering=steering,
+            drive_type=drive_type,
+            description=description
+        )
+        db.session.add(new_car_details)
+        db.session.flush()  # Get the ID without committing
+        
+        # Process and save images using your existing function
+        try:
+            processed_filenames = process_images(
+                image_files=images,
+                destination_folder=SELLING_FOLDER,
+                max_width=1920,
+                max_height=1080,
+                quality=85
+            )
+            
+            # Save image records to database
+            for filename in processed_filenames:
+                # Store relative path
+                # relative_path = f"/uploads/selling_vehicles/{filename}"
+                
+                car_image = CarSellingImages(
+                    car_to_sell_id=new_car_details.car_sell_id,
+                    image=filename
+                )
+                db.session.add(car_image)
+                
+        except ValueError as ve:
+            db.session.rollback()
+            return jsonify({
+                'success': False,
+                'message': str(ve)
+            }), 400
+        except Exception as img_error:
+            db.session.rollback()
+            return jsonify({
+                'success': False,
+                'message': 'Failed to process images',
+                'details': str(img_error)
+            }), 500
+        
+        # Parse and save features
+        if features_json:
+            try:
+                features_list = json.loads(features_json)
+                if isinstance(features_list, list):
+                    for feature_id in features_list:
+                        if feature_id:  # Skip empty values
+                            car_feature = CarSellingFeatures(
+                                feature=int(feature_id),
+                                car_to_sell_id=new_car_details.car_sell_id
+                            )
+                            db.session.add(car_feature)
+            except (json.JSONDecodeError, ValueError) as e:
+                print(f"Error parsing features: {e}")
+                # Continue without features rather than failing
+        
+        # Commit all changes
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Thank you. We will get back to you soon',
+            'data': {
+                'car_sell_id': new_car_details.car_sell_id,
+                'selling_id': new_selling.sell_id
+            }
+        }), 201
+        
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': 'Invalid data format',
+            'details': str(e)
+        }), 400
+    except Exception as e:
+        db.session.rollback()
+        print("Error at add_vehicle_to_sell(): ", str(e))
+        return jsonify({
+            'success': False,
+            'message': 'Failed. An unexpected error occurred',
+            'details': str(e)
+        }), 500
+
+
+# Get all selling vehicles
+@app.route('/get-selling-vehicles', methods=['GET'])
+def get_selling_vehicles():
+    try:
+        # Optional query parameters for filtering
+        status = request.args.get('status')
+        make_id = request.args.get('make_id')
+        body_type = request.args.get('body_type')
+        min_price = request.args.get('min_price')
+        max_price = request.args.get('max_price')
+        year_from = request.args.get('year_from')
+        year_to = request.args.get('year_to')
+        limit = request.args.get('limit', type=int)
+        
+        # Build query
+        query = db.session.query(CarToSellDetails).join(Selling)
+        
+        # Apply filters if provided
+        if status:
+            query = query.filter(Selling.status == status)
+        if make_id:
+            query = query.filter(CarToSellDetails.make == int(make_id))
+        if body_type:
+            query = query.filter(CarToSellDetails.body_type == int(body_type))
+        if min_price:
+            query = query.filter(CarToSellDetails.selling_price >= float(min_price))
+        if max_price:
+            query = query.filter(CarToSellDetails.selling_price <= float(max_price))
+        if year_from:
+            query = query.filter(CarToSellDetails.year >= int(year_from))
+        if year_to:
+            query = query.filter(CarToSellDetails.year <= int(year_to))
+        
+        # Order by most recent
+        query = query.order_by(CarToSellDetails.car_sell_id.desc())
+        
+        # Apply limit if provided
+        if limit:
+            query = query.limit(limit)
+        
+        # Execute query
+        vehicles = query.all()
+        
+        # Convert to dict with seller info
+        vehicles_data = []
+        for vehicle in vehicles:
+            vehicle_dict = vehicle.to_dict()
+            
+            # Add seller information from Selling table
+            selling = Selling.query.get(vehicle.selling_id)
+            if selling:
+                vehicle_dict['seller'] = {
+                    'full_name': selling.seller,
+                    'phone': selling.phone_number,
+                    'email': selling.email,
+                    'location': selling.location,
+                    'color': selling.color if hasattr(selling, 'color') else None,
+                    'status': selling.status if hasattr(selling, 'status') else None
+                }
+            
+            vehicles_data.append(vehicle_dict)
+        
+        return jsonify({
+            'success': True,
+            'count': len(vehicles_data),
+            'vehicles': vehicles_data
+        }), 200
+        
+    except Exception as e:
+        print("Error at get_selling_vehicles(): ", str(e))
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch vehicles',
+            'details': str(e)
+        }), 500
+
+
+# Get single selling vehicle by ID
+@app.route('/get-selling-vehicle/<int:car_sell_id>', methods=['GET'])
+def get_selling_vehicle(car_sell_id):
+    try:
+        vehicle = CarToSellDetails.query.get(car_sell_id)
+        
+        if not vehicle:
+            return jsonify({
+                'success': False,
+                'message': 'Vehicle not found'
+            }), 404
+        
+        vehicle_dict = vehicle.to_dict()
+        
+        # Add seller information
+        selling = Selling.query.get(vehicle.selling_id)
+        if selling:
+            vehicle_dict['seller'] = {
+                'full_name': selling.seller,
+                'phone': selling.phone_number,
+                'email': selling.email,
+                'location': selling.location,
+                'color': selling.color if hasattr(selling, 'color') else None,
+                'status': selling.status if hasattr(selling, 'status') else None
+            }
+        
+        return jsonify({
+            'success': True,
+            'vehicle': vehicle_dict
+        }), 200
+        
+    except Exception as e:
+        print("Error at get_selling_vehicle(): ", str(e))
+        return jsonify({
+            'success': False,
+            'message': 'Failed to fetch vehicle',
+            'details': str(e)
+        }), 500

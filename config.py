@@ -52,6 +52,7 @@ VEHICLE_IMAGES = 'static/uploads'
 BLOGS_FOLDER = 'static/images/blogs'
 ABOUT_US_FOLDER = 'static/images/about_us'
 REVIEWS_FOLDER = 'static/images/reviews'
+SELLING_FOLDER = 'static/images/selling'
 # UPLOAD_BLOGS_FOLDER = 'static/images/blogs/uploads'
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
@@ -62,6 +63,7 @@ app.config['VEHICLE_IMAGES'] = VEHICLE_IMAGES
 app.config['BLOGS_FOLDER'] = BLOGS_FOLDER
 app.config['ABOUT_US_FOLDER'] = ABOUT_US_FOLDER
 app.config['REVIEWS_FOLDER'] = REVIEWS_FOLDER
+app.config['SELLING_FOLDER'] = SELLING_FOLDER
 # app.config['UPLOAD_BLOGS_FOLDER'] = UPLOAD_BLOGS_FOLDER
 # app.config['CAROUSEL_FOLDER'] = 'static/images/carousel'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
@@ -83,3 +85,5 @@ if not os.path.exists(ABOUT_US_FOLDER):
     os.makedirs(ABOUT_US_FOLDER)
 if not os.path.exists(REVIEWS_FOLDER):
     os.makedirs(REVIEWS_FOLDER)
+if not os.path.exists(SELLING_FOLDER):
+    os.makedirs(SELLING_FOLDER)

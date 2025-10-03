@@ -259,6 +259,7 @@ class ContactUs(db.Model):
     phone = db.Column(db.Integer, nullable = False)
     email = db.Column(db.String(100))
     message = db.Column(db.Text, nullable=False)
+    contact_type = db.Column(db.String(20), default='Contact')
     status = db.Column(db.String(15), default='Unread')
 
     def to_dict(self):
@@ -268,6 +269,7 @@ class ContactUs(db.Model):
             'phone': self.phone,
             'email': self.email,
             'message': self.message,
+            'contact_type': self.contact_type,
             'status' : self.status,
         }
 
@@ -437,6 +439,7 @@ class Selling(db.Model):
     email = db.Column(db.String(100), nullable=False)
     location = db.Column(db.String(100), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    status = db.Column(db.String(20), default='Pending')
     
     # Relationships
     car_details = db.relationship('CarToSellDetails', backref='seller_ref', lazy=True, cascade='all, delete-orphan')
@@ -519,7 +522,7 @@ class CarSellingImages(db.Model):
         return {
             'car_selling_image_id': self.car_selling_image_id,
             'car_to_sell_id': self.car_to_sell_id,
-            'image': self.image
+            'image': url_for('static', filename=f'images/selling/{self.image}', _external=True) 
         }
 
 class CarSellingFeatures(db.Model):
