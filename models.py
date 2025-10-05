@@ -110,6 +110,10 @@ class AboutUs(db.Model):
     statement = db.Column(db.Text, nullable=False)
     image_1 = db.Column(db.Text, nullable =  False)
     image_2 = db.Column(db.Text, nullable = False)
+    image_1_alt = db.Column(db.String(255))
+    image_2_alt = db.Column(db.String(255))
+
+
     
     def to_dict(self):
         return {
@@ -117,6 +121,8 @@ class AboutUs(db.Model):
             'statement': self.statement,
             'image_1': self.image_1,
             'image_2': self.image_2,
+            'image_1_alt': self.image_1_alt,
+            'image_2_alt': self.image_2_alt,
         }
 
 class WhyChooseUs(db.Model):

@@ -1637,18 +1637,34 @@ def del_location():
         }), 500
 
 
-# add vehicle
+# add/update vehicle
 @app.route('/add-vehicle', methods=['POST'])
 def add_vehicle():
     """
-    Complete function to add a vehicle with image processing and database storage
+    Complete function to add or update a vehicle with image processing and database storage
     """
-    print("Adding car...")
+    print("Saving car...")
 
     try:
         # Regular form fields
         form_data = request.form.to_dict()
         print("Form Data:", form_data)
+        
+        # Check if this is an update operation
+        vehicle_id = form_data.get('id') or form_data.get('car_id')
+        is_update = vehicle_id is not None
+        
+        if is_update:
+            print(f"Updating existing vehicle with ID: {vehicle_id}")
+            # Get existing vehicle
+            existing_car = Cars.query.get(int(vehicle_id))
+            if not existing_car:
+                return jsonify({
+                    "success": False,
+                    "message": "Vehicle not found"
+                }), 404
+        else:
+            print("Adding new vehicle")
 
         # Features (may be JSON string or already parsed)
         features = request.form.get("features")
@@ -1723,7 +1739,7 @@ def add_vehicle():
 
         print(f"Found {len(valid_images)} valid images total")
 
-        # Validate required fields (updated field names)
+        # Validate required fields
         required_fields = ['make_id', 'name', 'registration_year']
         for field in required_fields:
             if not form_data.get(field):
@@ -1746,17 +1762,17 @@ def add_vehicle():
                 "message": "Invalid registration year format"
             }), 400
 
-        # Process images if any - FIXED
+        # Process images if any
         processed_image_filenames = []
         if valid_images:
-            # Define destination folder for vehicle images - FIXED
-            destination_folder = VEHICLE_IMAGES  # Make sure this constant is defined
+            # Define destination folder for vehicle images
+            destination_folder = VEHICLE_IMAGES
             os.makedirs(destination_folder, exist_ok=True)
             
             try:
                 processed_image_filenames = process_images(
                     valid_images, 
-                    destination_folder,  # Use the defined variable
+                    destination_folder,
                     max_width=1920,
                     max_height=1080,
                     quality=85
@@ -1771,74 +1787,145 @@ def add_vehicle():
 
         # Find or create location
         location = form_data.get('location')
-        # location_obj = None
-        # if location_name:
-        #     # Try to find existing location
-        #     location_obj = Locations.query.filter_by(location_name=location_name).first()
-        #     if not location_obj:
-        #         # Create new location if it doesn't exist
-        #         location_obj = Locations(location_name=location_name)
-        #         db.session.add(location_obj)
-        #         db.session.flush()  # Get the location_id
 
-        # Create new car record with updated field mapping
+        # Create or update car record
         try:
-            new_car = Cars(
-                name=form_data.get('name'),
-                price=float(form_data['price']) if form_data.get('price') else None,
-                condition=form_data.get('condition'),
-                model_id=int(form_data['model_id']) if form_data.get('model_id') else None,
-                make=int(form_data['make_id']),
-                body_style=int(form_data.get('body_id', 1)) if form_data.get('body_id') else None,
-                mileage=form_data.get('mileage'),
-                year=year,
-                engine=form_data.get('engine_size'),
-                location=location,
-                ref_no=form_data.get('ref_number'),
-                model_code=form_data.get('model_code'),
-                steering=form_data.get('steering_wheel'),
-                exterior_color=form_data.get('exterior_color'),
-                fuel=form_data.get('fuel_type'),
-                seats=int(form_data['seats']) if form_data.get('seats') else None,
-                interior_color=form_data.get('interior_color'),
-                seats_color=form_data.get('seats_color'),
-                drive=form_data.get('drive_type'),
-                weight=form_data.get('weight'),
-                doors=form_data.get('doors'),
-                transmission=form_data.get('transmission')
-            )
-            
-            db.session.add(new_car)
-            db.session.flush()  # Get the car_id without committing
-            
-            # Add images to database
-            for image_filename in processed_image_filenames:
-                car_image = CarImages(
-                    car=new_car.car_id,
-                    image=image_filename
-                )
-                db.session.add(car_image)
-            
-            # Add features to database
-            if features and isinstance(features, list):
-                for feature_id in features:
-                    try:
-                        car_feature = CarFeatures(
-                            feature=int(feature_id),
-                            car_id=new_car.car_id
+            if is_update:
+                # Update existing vehicle
+                car = existing_car
+                car.name = form_data.get('name')
+                car.price = float(form_data['price']) if form_data.get('price') else None
+                car.condition = form_data.get('condition')
+                car.model_id = int(form_data['model_id']) if form_data.get('model_id') else None
+                car.make = int(form_data['make_id'])
+                car.body_style = int(form_data.get('body_id', 1)) if form_data.get('body_id') else None
+                car.mileage = form_data.get('mileage')
+                car.year = year
+                car.engine = form_data.get('engine_size')
+                car.location = location
+                car.ref_no = form_data.get('ref_number')
+                car.model_code = form_data.get('model_code')
+                car.steering = form_data.get('steering_wheel')
+                car.exterior_color = form_data.get('exterior_color')
+                car.fuel = form_data.get('fuel_type')
+                car.seats = int(form_data['seats']) if form_data.get('seats') else None
+                car.interior_color = form_data.get('interior_color')
+                car.seats_color = form_data.get('seats_color')
+                car.drive = form_data.get('drive_type')
+                car.weight = form_data.get('weight')
+                car.doors = form_data.get('doors')
+                car.transmission = form_data.get('transmission')
+                car.updated_at = datetime.utcnow()
+                
+                # Handle images for update
+                if processed_image_filenames:
+                    # Option 1: Delete old images and add new ones
+                    # Get old image filenames for cleanup
+                    old_images = CarImages.query.filter_by(car=car.car_id).all()
+                    old_image_filenames = [img.image for img in old_images]
+                    
+                    # Delete old image records
+                    CarImages.query.filter_by(car=car.car_id).delete()
+                    
+                    # Add new images
+                    for image_filename in processed_image_filenames:
+                        car_image = CarImages(
+                            car=car.car_id,
+                            image=image_filename
                         )
-                        db.session.add(car_feature)
-                    except (ValueError, TypeError):
-                        print(f"Invalid feature ID: {feature_id}")
-                        continue
+                        db.session.add(car_image)
+                    
+                    # Delete old image files from disk
+                    for old_filename in old_image_filenames:
+                        old_file_path = os.path.join(destination_folder, old_filename)
+                        if os.path.exists(old_file_path):
+                            try:
+                                os.remove(old_file_path)
+                                print(f"Deleted old image: {old_filename}")
+                            except OSError as e:
+                                print(f"Error deleting old image {old_filename}: {e}")
+                
+                # Handle features for update
+                if features is not None:  # Allow empty list to clear all features
+                    # Delete existing features
+                    CarFeatures.query.filter_by(car_id=car.car_id).delete()
+                    
+                    # Add new features
+                    if isinstance(features, list):
+                        for feature_id in features:
+                            try:
+                                car_feature = CarFeatures(
+                                    feature=int(feature_id),
+                                    car_id=car.car_id
+                                )
+                                db.session.add(car_feature)
+                            except (ValueError, TypeError):
+                                print(f"Invalid feature ID: {feature_id}")
+                                continue
+                
+                success_message = "Vehicle updated successfully"
+                
+            else:
+                # Create new vehicle
+                new_car = Cars(
+                    name=form_data.get('name'),
+                    price=float(form_data['price']) if form_data.get('price') else None,
+                    condition=form_data.get('condition'),
+                    model_id=int(form_data['model_id']) if form_data.get('model_id') else None,
+                    make=int(form_data['make_id']),
+                    body_style=int(form_data.get('body_id', 1)) if form_data.get('body_id') else None,
+                    mileage=form_data.get('mileage'),
+                    year=year,
+                    engine=form_data.get('engine_size'),
+                    location=location,
+                    ref_no=form_data.get('ref_number'),
+                    model_code=form_data.get('model_code'),
+                    steering=form_data.get('steering_wheel'),
+                    exterior_color=form_data.get('exterior_color'),
+                    fuel=form_data.get('fuel_type'),
+                    seats=int(form_data['seats']) if form_data.get('seats') else None,
+                    interior_color=form_data.get('interior_color'),
+                    seats_color=form_data.get('seats_color'),
+                    drive=form_data.get('drive_type'),
+                    weight=form_data.get('weight'),
+                    doors=form_data.get('doors'),
+                    transmission=form_data.get('transmission')
+                )
+                
+                db.session.add(new_car)
+                db.session.flush()  # Get the car_id without committing
+                car = new_car
+                
+                # Add images to database
+                for image_filename in processed_image_filenames:
+                    car_image = CarImages(
+                        car=car.car_id,
+                        image=image_filename
+                    )
+                    db.session.add(car_image)
+                
+                # Add features to database
+                if features and isinstance(features, list):
+                    for feature_id in features:
+                        try:
+                            car_feature = CarFeatures(
+                                feature=int(feature_id),
+                                car_id=car.car_id
+                            )
+                            db.session.add(car_feature)
+                        except (ValueError, TypeError):
+                            print(f"Invalid feature ID: {feature_id}")
+                            continue
+                
+                success_message = "Vehicle added successfully"
             
             # Commit all changes
             db.session.commit()
             
             return jsonify({
                 "success": True,
-                "message": "Vehicle added successfully",
-                "car_id": new_car.car_id,
+                "message": success_message,
+                "car_id": car.car_id,
                 "vehicle_name": form_data.get('name'),
                 "price": form_data.get('price'),
                 "condition": form_data.get('condition'),
@@ -1849,8 +1936,8 @@ def add_vehicle():
             
         except Exception as e:
             db.session.rollback()
-            # Clean up processed images if database operation failed - FIXED
-            if processed_image_filenames:
+            # Clean up processed images if database operation failed
+            if processed_image_filenames and not is_update:
                 for filename in processed_image_filenames:
                     file_path = os.path.join(destination_folder, filename)
                     if os.path.exists(file_path):
@@ -2742,6 +2829,14 @@ def get_blog_by_id(blog_id):
             blog_data['image_url'] = url_for('static', filename=f'images/blogs/{blog_data['image']}', _external=True) 
         else:
             blog_data['image_url'] = None
+        
+        if blog_data['category']: 
+                cat_id = blog_data['category']
+                category = Categories.query.filter_by(category_id = cat_id).first()
+                blog_data['category'] = category.category_name
+            
+        else:
+            blog_data['category'] = ""
             
         return jsonify({
             'success': True,
@@ -2777,9 +2872,10 @@ def get_about_us():
                 'statement': about_us.statement,
                 'image_1' :  url_for('static', filename=f'images/about_us/{about_us.image_1}', _external=True),
                 'image_2': url_for('static', filename=f'images/about_us/{about_us.image_2}', _external=True),
+                'image_1_alt' : about_us.image_1_alt,
+                'image_2_alt' : about_us.image_2_alt,
                 'why_choose_us': why_chose_us_data
             }
-            print(str(about))
         
             return{
                 'success': True,
@@ -3638,4 +3734,369 @@ def get_selling_vehicle(car_sell_id):
             'success': False,
             'message': 'Failed to fetch vehicle',
             'details': str(e)
+        }), 500
+
+
+# update about us
+@app.route('/update-about', methods=['POST'])
+def update_about_us():
+    try:
+        statement = request.form.get("statement")
+        image_1 = request.files.get("image_1")
+        image_2 = request.files.get("image_2")
+        image_1_alt = request.form.get("image_1_alt")
+        image_2_alt = request.form.get("image_2_alt")
+
+        about_us = AboutUs.query.first()
+        if statement:
+            about_us.statement = statement
+            db.session.commit()
+        
+        if image_1_alt:
+            about_us.image_1_alt = image_1_alt
+            db.session.commit()
+        
+        if image_2_alt:
+            about_us.image_2_alt = image_2_alt
+            db.session.commit()
+
+        if image_1:
+            # delete previous image
+            previous_image = about_us.image_1
+            image_path = os.path.join(ABOUT_US_FOLDER, previous_image)
+            if os.path.exists(image_path):
+                os.remove(image_path)
+            
+            processed_image = process_images(image_1, ABOUT_US_FOLDER)
+            about_us.image_1 = processed_image[0]
+            db.session.commit()
+
+        if image_2:
+            # delete previous image
+            previous_image = about_us.image_2
+            image_path = os.path.join(ABOUT_US_FOLDER, previous_image)
+            if os.path.exists(image_path):
+                os.remove(image_path)
+
+            processed_image = process_images(image_2, ABOUT_US_FOLDER)
+            about_us.image_2 = processed_image[0]
+            db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'About us updated'
+        })
+    except Exception as e:
+        print("Error at update_about_us(): ", str(e))
+        return jsonify({
+            'success': False,
+            'error': 'Failed. An unexpected error occured',
+            'details': str(e)
+        })
+
+# update blog
+@app.route('/update-blog', methods=['POST'])
+def update_blog():
+    try:
+        content = request.form.get('content')
+        title = request.form.get('title')
+        image_alt = request.form.get('image_alt')
+        excerpt = request.form.get('excerpt')
+        category = request.form.get('category')
+        image_filename = request.files.get('image')
+        id=request.form.get("id")
+
+        print("title", str(title))
+        print("image_alt", str(image_alt))
+        print("excerpt", str(excerpt))
+        print("category", str(category))
+        print("image_filename", str(image_filename))
+
+        blog = Blogs.query.filter_by(blog_id = id).first()
+       
+        blog.content = content
+        blog.title = title
+        blog.image_alt = image_alt
+        blog.excerpt = excerpt
+        if category:
+            blog.category = category
+        
+        if image_filename:
+            # delete previous image
+            previous_image = blog.image
+            image_path = os.path.join(BLOGS_FOLDER, previous_image)
+            if os.path.exists(image_path):
+                os.remove(image_path)
+            
+            processed_image = process_images(image_filename, BLOGS_FOLDER)
+            blog.image = processed_image[0]
+        
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'message': "Blog updated"
+        }), 200
+
+
+    except Exception as e:
+        print("Error at update_blog(): ", str(e))
+        return jsonify({
+            'success': False,
+            'error': 'Failed. An unexpected error occured'
+        }), 500
+    
+# delete blog
+@app.route('/del-blog/<blog_id>', methods=['GET'])
+def del_blog(blog_id):
+    try:
+        existing_blog = Blogs.query.filter_by(blog_id = blog_id).first()
+        image_filename = existing_blog.image
+        if image_filename:
+                # delete previous image
+                previous_image = existing_blog.image
+                image_path = os.path.join(BLOGS_FOLDER, previous_image)
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+
+        db.session.delete(existing_blog)
+        db.session.commit()
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'message': "Blog deleted"
+        }), 200
+    
+    except Exception as e:
+        print("Error at del_blog(): ", str(e))
+        return jsonify({
+            'success': False,
+            'error': 'Failed. An unexpected error occured'
+        }), 500
+
+# update sell status
+@app.route('/change-selling-status/<selling_id>', methods=['GET'])
+def toggle_selling_status(selling_id):
+    try:
+        selling = Selling.query.filter_by(sell_id = selling_id).first()
+        if selling.status == 'Pending':
+            selling.status = 'Complete'
+        else:
+            selling.status = 'Pending'
+        
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'message': 'Status updated'
+        }), 200
+    
+    except Exception as e:
+        print('error in toggle_selling_status(): ', str(e))
+        return jsonify({
+            'success': False,
+            'error': "Failed. An unexpected error occured"
+        }), 500
+
+@app.route('/del-sell/<selling_id>', methods=['GET'])
+def del_sell(selling_id):
+    try:
+        selling = Selling.query.filter_by(sell_id=selling_id).first()
+        
+        if not selling:
+            return jsonify({
+                'success': False,
+                'error': 'Selling record not found'
+            }), 404
+        
+        # Get car details first (to access images and features through relationship)
+        car_to_sell_details = CarToSellDetails.query.filter_by(selling_id=selling_id).first()
+        
+        if car_to_sell_details:
+            # Delete all images from filesystem
+            selling_images = CarSellingImages.query.filter_by(car_to_sell_id=car_to_sell_details.car_sell_id).all()
+            for image in selling_images:
+                image_to_delete = image.image
+                if image_to_delete:
+                    image_path = os.path.join(SELLING_FOLDER, image_to_delete)
+                    if os.path.exists(image_path):
+                        os.remove(image_path)
+                # Delete image record from database
+                db.session.delete(image)
+            
+            # Delete car selling features
+            car_selling_features = CarSellingFeatures.query.filter_by(car_to_sell_id=car_to_sell_details.car_sell_id).all()
+            for feature in car_selling_features:
+                db.session.delete(feature)
+            
+            # Delete car details
+            db.session.delete(car_to_sell_details)
+        
+        # Delete the main selling record
+        db.session.delete(selling)
+        
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'message': 'Selling request deleted '
+        }), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        print('error in del_sell(): ', str(e))
+        return jsonify({
+            'success': False,
+            'error': "Failed. An unexpected error occurred"
+        }), 500
+
+# delete vehicle
+@app.route('/del-vehicle/<int:car_id>', methods=['GET'])
+def del_vehicle(car_id):
+    try:
+        # Find the car by ID
+        car = Cars.query.get(car_id)
+        
+        # Check if car exists
+        if not car:
+            return jsonify({
+                'success': False,
+                'error': 'Vehicle not found'
+            }), 404
+        
+        # Delete associated image files from filesystem
+        for car_image in car.images:
+            image_path = os.path.join('VEHICLE_IMAGES', car_image.image)
+            if os.path.exists(image_path):
+                try:
+                    os.remove(image_path)
+                except OSError as e:
+                    print(f"Error deleting image {image_path}: {str(e)}")
+        
+        # Delete the car from database
+        # This will cascade delete CarImages and CarFeatures due to cascade='all, delete-orphan'
+        db.session.delete(car)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Vehicle deleted'
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print("Error in del_vehicle(): ", str(e))
+        return jsonify({
+            'success': False,
+            'error': 'Failed. An unexpected error occurred'
+        }), 500
+
+
+
+# edit data
+@app.route('/save-vehicle/<int:car_id>', methods=['POST'])
+def save_vehicle(car_id=None):
+    try:
+        data = request.form
+        
+        # Determine if this is an update or new vehicle
+        if car_id:
+            vehicle = Cars.query.get(car_id)
+            if not vehicle:
+                return jsonify({
+                    'success': False,
+                    'message': 'Vehicle not found'
+                }), 404
+        else:
+            vehicle = Cars()
+        
+        # Update basic vehicle information
+        vehicle.name = data.get('name')
+        vehicle.price = data.get('price')
+        vehicle.condition = data.get('condition')
+        vehicle.model_id = data.get('model_id') if data.get('model_id') else None
+        
+        # Update existing fields
+        vehicle.make = data.get('make')
+        vehicle.body_style = data.get('body_style') if data.get('body_style') else None
+        vehicle.mileage = data.get('mileage')
+        vehicle.year = data.get('year')
+        vehicle.engine = data.get('engine')
+        vehicle.location = data.get('location') if data.get('location') else None
+        vehicle.ref_no = data.get('ref_no')
+        vehicle.model_code = data.get('model_code')
+        vehicle.steering = data.get('steering')
+        vehicle.exterior_color = data.get('exterior_color')
+        vehicle.fuel = data.get('fuel')
+        vehicle.seats = data.get('seats') if data.get('seats') else None
+        vehicle.interior_color = data.get('interior_color')
+        vehicle.seats_color = data.get('seats_color')
+        vehicle.drive = data.get('drive')
+        vehicle.doors = data.get('doors')
+        vehicle.transmission = data.get('transmission')
+        vehicle.weight = data.get('weight')
+        
+        # Add to session if new vehicle
+        if not car_id:
+            db.session.add(vehicle)
+        
+        # Commit to get the car_id
+        db.session.commit()
+        
+        # Handle features (if provided)
+        if 'features' in data:
+            # Remove existing features if updating
+            if car_id:
+                CarFeatures.query.filter_by(car_id=vehicle.car_id).delete()
+            
+            # Add new features
+            features = data.getlist('features') if hasattr(data.get('features'), '__iter__') else data.get('features', '').split(',')
+            for feature_id in features:
+                if feature_id:
+                    car_feature = CarFeatures(
+                        car_id=vehicle.car_id,
+                        feature=int(feature_id)
+                    )
+                    db.session.add(car_feature)
+        
+        # Handle images (if provided)
+        if 'images' in request.files:
+            files = request.files.getlist('images')
+            for file in files:
+                if file and file.filename:
+                    # Save the file and get the path
+                    filename = secure_filename(file.filename)
+                    # Add your file saving logic here
+                    # file_path = save_uploaded_file(file, filename)
+                    
+                    car_image = CarImages(
+                        car=vehicle.car_id,
+                        image=filename  # or file_path
+                    )
+                    db.session.add(car_image)
+        
+        # Handle image URLs (if provided as array)
+        if 'image_urls' in data:
+            image_urls = data.getlist('image_urls')
+            for image_url in image_urls:
+                if image_url:
+                    car_image = CarImages(
+                        car=vehicle.car_id,
+                        image=image_url
+                    )
+                    db.session.add(car_image)
+        
+        db.session.commit()
+        
+        message = 'Vehicle updated ' if car_id else 'Vehicle added successfully!'
+        
+        return jsonify({
+            'success': True,
+            'message': message,
+            'car_id': vehicle.car_id
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print("Error in save_vehicle(): ", str(e))
+        return jsonify({
+            'success': False,
+            'message': 'Failed to save vehicle. An unexpected error occurred'
         }), 500
