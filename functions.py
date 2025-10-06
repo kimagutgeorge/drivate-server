@@ -4127,20 +4127,73 @@ def mark_vehicle_as_sold(car_id):
 @app.route("/filter-vehicles", methods = ['POST'])
 def filter_vehicles():
     try:
+        # Get all filter parameters from form
         location = request.form.get("location")
         body = request.form.get("body")
         model = request.form.get("model")
         make = request.form.get("make")
-        price_range = request.form.get("price_range")
         min_year = request.form.get("min_year")
         max_year = request.form.get("max_year")
         fuel = request.form.get("fuel")
-        transmissiion = request.form.get("transmissiion")
+        transmission = request.form.get("transmission")  # Fixed typo
         condition = request.form.get("condition")
         min_price = request.form.get("min_price")
         max_price = request.form.get("max_price")
+        status = request.form.get("status")
 
-        fetched_vehicles = Cars.query.all()
+        # Start with base query
+        query = Cars.query
+        
+        # Apply filters directly to the query for better performance
+        # Only apply filter if value exists and is not empty/placeholder
+        if location and location.strip() and location.isdigit():
+            query = query.filter(Cars.location == int(location))
+        
+        if body and body.strip() and body.isdigit():
+            query = query.filter(Cars.body_style == int(body))
+        
+        if model and model.strip() and model.isdigit():
+            query = query.filter(Cars.model_id == int(model))
+        
+        if make and make.strip() and make.isdigit():
+            query = query.filter(Cars.make == int(make))
+        
+        if fuel and fuel.strip():
+            query = query.filter(Cars.fuel == fuel)
+        
+        if transmission and transmission.strip():
+            query = query.filter(Cars.transmission == transmission)
+        
+        if condition and condition.strip():
+            query = query.filter(Cars.condition == condition)
+        
+        if status and status.strip():
+            query = query.filter(Cars.status == status)
+        
+        # Year range filter
+        if min_year and min_year.strip() and min_year.isdigit():
+            query = query.filter(Cars.year >= int(min_year))
+        
+        if max_year and max_year.strip() and max_year.isdigit():
+            query = query.filter(Cars.year <= int(max_year))
+        
+        # Price range filter
+        if min_price and min_price.strip():
+            try:
+                query = query.filter(Cars.price >= float(min_price))
+            except ValueError:
+                pass  # Skip invalid price values
+        
+        if max_price and max_price.strip():
+            try:
+                query = query.filter(Cars.price <= float(max_price))
+            except ValueError:
+                pass  # Skip invalid price values
+        
+        # Execute query
+        fetched_vehicles = query.all()
+        
+        # Build vehicle data
         vehicles = []
         for car in fetched_vehicles:
             vehicle_data = {
@@ -4157,7 +4210,6 @@ def filter_vehicles():
                 "transmission": car.transmission,
                 "seats": car.seats,
                 "status": car.status,
-                
                 
                 # Make and model info
                 "make": {
@@ -4183,7 +4235,6 @@ def filter_vehicles():
                 } if car.location_ref else None,
                 
                 # All images
-                # All images
                 "images": [
                     {
                         "car_image_id": img.car_image_id,
@@ -4202,25 +4253,82 @@ def filter_vehicles():
                 "created_at": car.created_at.isoformat() if car.created_at else None,
                 "updated_at": car.updated_at.isoformat() if car.updated_at else None
             }
-
             vehicles.append(vehicle_data)
-        
-        filtered_vehicles = []
-
-        if location:
-            for car in vehicles:
-                if car["location"] and car["location"]["location_id"] == int(location):
-                    filtered_vehicles.append(car)
-    
-        
-        print("Vehicles in Location: ", str(filtered_vehicles))
         
         return jsonify({
             'success': True,
+            'vehicles': vehicles,
+            'total_count': len(vehicles)
         }), 200
+        
+    except ValueError as e:
+        print("ValueError in filter_vehicles(): ", str(e))
+        return jsonify({
+            'success': False,
+            'error': "Invalid filter parameters"
+        }), 400
     except Exception as e:
         print("Error in filter_vehicles(): ", str(e))
         return jsonify({
             'success': False,
-            'error': "Failed. An unexpected error occured"
+            'error': "Failed. An unexpected error occurred"
+        }), 500
+    
+
+# filter blogs
+@app.route('/filter-blogs/<blog_id>', methods=['GET'])
+def filter_blogs(blog_id):
+    """
+    Fetch all blogs sorted by creation date (newest first)
+    """
+    try:
+       
+        # Get all blogs ordered by creation date (newest first)
+        blogs = None
+
+        if blog_id ==  "All":
+            blogs = Blogs.query.order_by(Blogs.created_at.desc()).all()
+        else:
+            blogs = Blogs.query.filter_by(category = blog_id).order_by(Blogs.created_at.desc()).all()
+        
+        # Convert to dictionary format
+        blogs_data = []
+       
+        for blog in blogs:
+            blog_dict = blog.to_dict()
+            
+            # Add full image URL if image exists
+            if blog_dict['image']:
+                blog_dict['image_url'] =  url_for('static', filename=f'images/blogs/{blog_dict['image']}', _external=True)
+            else:
+                blog_dict['image_url'] = None
+
+            if blog_dict['excerpt']:
+                blog_dict['excerpt'] = blog.excerpt
+
+            else:
+                blog_dict['excerpt'] = ""
+
+            if blog_dict['category']: 
+                cat_id = blog_dict['category']
+                category = Categories.query.filter_by(category_id = cat_id).first()
+                blog_dict['category'] = category.category_name
+            
+            else:
+                blog_dict['category'] = ""
+                
+            blogs_data.append(blog_dict)
+        
+        return jsonify({
+            'success': True,
+            'blogs': blogs_data,
+            'count': len(blogs_data)
+        }), 200
+        
+    except Exception as e:
+        print(f"Error fetching blogs: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to fetch blogs',
+            'message': str(e)
         }), 500
