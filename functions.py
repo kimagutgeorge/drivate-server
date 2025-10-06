@@ -2028,6 +2028,7 @@ def get_vehicle(car_id):
                 "doors": car.doors,
                 "steering": car.steering,
                 "weight": car.weight,
+                "status": car.status,
                 
                 # Make information
                 "make": {
@@ -2157,6 +2158,7 @@ def get_vehicles():
                 "fuel": car.fuel,
                 "transmission": car.transmission,
                 "seats": car.seats,
+                "status": car.status,
                 
                 
                 # Make and model info
@@ -4099,4 +4101,126 @@ def save_vehicle(car_id=None):
         return jsonify({
             'success': False,
             'message': 'Failed to save vehicle. An unexpected error occurred'
+        }), 500
+
+# mark vehicle as sold
+@app.route('/toggle-vehicle-status/<car_id>', methods=['GET'])
+def mark_vehicle_as_sold(car_id):
+    try:
+        vehicle = Cars.query.filter_by(car_id = car_id).first()
+        vehicle.status = 'Sold'
+
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'message': 'Vehicle status changed'
+        }), 200
+    except Exception as e:
+        print("Error in mark_vehicle_as_sold(): ", str(e))
+        return jsonify({
+            'success': False,
+            'error': 'Failed. An unexpected error occured',
+            'details': str(e)
+        }), 500
+
+# filter vehicles
+@app.route("/filter-vehicles", methods = ['POST'])
+def filter_vehicles():
+    try:
+        location = request.form.get("location")
+        body = request.form.get("body")
+        model = request.form.get("model")
+        make = request.form.get("make")
+        price_range = request.form.get("price_range")
+        min_year = request.form.get("min_year")
+        max_year = request.form.get("max_year")
+        fuel = request.form.get("fuel")
+        transmissiion = request.form.get("transmissiion")
+        condition = request.form.get("condition")
+        min_price = request.form.get("min_price")
+        max_price = request.form.get("max_price")
+
+        fetched_vehicles = Cars.query.all()
+        vehicles = []
+        for car in fetched_vehicles:
+            vehicle_data = {
+                "car_id": car.car_id,
+                "name": car.name,
+                "price": float(car.price) if car.price else None,
+                "condition": car.condition,
+                "year": car.year,
+                "mileage": car.mileage,
+                "ref_no": car.ref_no,
+                "steering": car.steering,
+                "engine": car.engine,
+                "fuel": car.fuel,
+                "transmission": car.transmission,
+                "seats": car.seats,
+                "status": car.status,
+                
+                
+                # Make and model info
+                "make": {
+                    "make_id": car.make_ref.make_id if car.make_ref else None,
+                    "name": car.make_ref.name if car.make_ref else None,
+                    "logo_image": car.make_ref.logo_image if car.make_ref else None
+                },
+                "model": {
+                    "model_id": car.model_ref.model_id if car.model_ref else None,
+                    "model_name": car.model_ref.model_name if car.model_ref else None
+                } if car.model_ref else None,
+                
+                # Body style
+                "body_style": {
+                    "style_id": car.body_style_ref.style_id if car.body_style_ref else None,
+                    "name": car.body_style_ref.name if car.body_style_ref else None
+                } if car.body_style_ref else None,
+                
+                # Location
+                "location": {
+                    "location_id": car.location_ref.location_id if car.location_ref else None,
+                    "location_name": car.location_ref.location_name if car.location_ref else None
+                } if car.location_ref else None,
+                
+                # All images
+                # All images
+                "images": [
+                    {
+                        "car_image_id": img.car_image_id,
+                        "image": img.image,
+                        "image_url": url_for('static', filename=f'uploads/{img.image}', _external=True)
+                    } for img in car.images
+                ],
+
+                # Primary image for backward compatibility
+                "primary_image_url": url_for('static', filename=f'uploads/{car.images[0].image}', _external=True) if car.images else None,
+                
+                # Image count
+                "image_count": len(car.images),
+                
+                # Timestamps
+                "created_at": car.created_at.isoformat() if car.created_at else None,
+                "updated_at": car.updated_at.isoformat() if car.updated_at else None
+            }
+
+            vehicles.append(vehicle_data)
+        
+        filtered_vehicles = []
+
+        if location:
+            for car in vehicles:
+                if car["location"] and car["location"]["location_id"] == int(location):
+                    filtered_vehicles.append(car)
+    
+        
+        print("Vehicles in Location: ", str(filtered_vehicles))
+        
+        return jsonify({
+            'success': True,
+        }), 200
+    except Exception as e:
+        print("Error in filter_vehicles(): ", str(e))
+        return jsonify({
+            'success': False,
+            'error': "Failed. An unexpected error occured"
         }), 500

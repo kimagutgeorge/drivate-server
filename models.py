@@ -348,6 +348,7 @@ class Cars(db.Model):
     doors = db.Column(db.String(50))
     transmission = db.Column(db.String(50))
     weight = db.Column(db.String(50))
+    status = db.Column(db.String(20), default='In Stock')
     
     # Timestamp fields
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -391,7 +392,8 @@ class Cars(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'images': [img.to_dict() for img in self.images],
-            'features': [feat.to_dict() for feat in self.features]
+            'features': [feat.to_dict() for feat in self.features],
+            'status': self.status
         }
 
 
