@@ -4,25 +4,30 @@ from config import *
 # 
 # utility classses
 #
-def validate_user(user):
-    # Clean the input thoroughly
-    original_user = user.replace("-", " ")
-    cleaned_user = ' '.join(original_user.split()).strip()
-    print("Cleaned user input: '" + str(cleaned_user) + "'")
+def validate_user(user_logged_in):
     
-    # Get all users and compare after normalizing both sides
-    all_users = Users.query.all()
+    user = Users.query.filter_by(email = user_logged_in).first()
+    print("User Email", user.email)
+    return True
+    # # Clean the input thoroughly
+    # original_user = user_logged_in.replace("-", " ")
+    # cleaned_user = ' '.join(original_user.split()).strip()
+    # print("Cleaned user input: '" + str(cleaned_user) + "'")
     
-    for user in all_users:
-        # Normalize the database name the same way
-        db_name_normalized = ' '.join(user.name.split()).strip()
+    # # Get all users and compare after normalizing both sides
+    # all_users = Users.query.all()
+    
+    # for user in all_users:
+    #     # Normalize the database name the same way
+    #     db_name_normalized = ' '.join(user.email.split()).strip()
         
-        if db_name_normalized.lower() == cleaned_user.lower():
-            print(f"Match found: '{user.name}' -> '{db_name_normalized}'")
-            return True
+    #     if db_name_normalized.lower() == cleaned_user.lower():
+    #         print(f"Match found: '{user.email}' -> '{db_name_normalized}'")
+    #         return True
     
-    print("No user found")
-    return False
+        
+    # print("No user found")
+    # return False
 
 
 def process_images(image_files, destination_folder, max_width=1920, max_height=1080, quality=85):
@@ -4332,3 +4337,160 @@ def filter_blogs(blog_id):
             'error': 'Failed to fetch blogs',
             'message': str(e)
         }), 500
+    
+# get user
+@app.route('/get-user', methods = ['GET'])
+def get_user():
+    try:
+    # Get all features from database
+        fetched_user = Users.query.first()
+        user_data = {
+            'id': fetched_user.id,
+            'email': fetched_user.email,
+            'name': fetched_user.name
+        }
+        
+
+        return jsonify({
+            'success': True,
+            'user': user_data,
+        }), 200
+    except Exception as e:
+        print(f"Error in get_user: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to fetch blogs',
+            'message': str(e)
+        }), 500
+
+# update password
+@app.route("/update-user", methods=['POST'])
+def update_user():
+    try:
+        email = request.form.get('email')
+        name = request.form.get('name')
+        new_password = request.form.get('new_password')
+        old_password = request.form.get('old_password')
+
+        # Find user
+        user = Users.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({
+                'sucess': False,
+                'error': 'User not found'
+            }), 200
+
+        # If old_password provided, check before updating password
+        if old_password:
+            if not check_password_hash(user.password, old_password):
+                return jsonify({
+                    'success': False,
+                    'error': 'Incorrect password'
+                }), 200
+
+        # Update details
+        user.name = name if name else user.name
+        user.email = email if email else user.email
+
+        if new_password:
+            user.password = generate_password_hash(new_password)
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'User updated '
+        }), 200
+
+    except Exception as e:
+        print("Error at update_user(): ", str(e))
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': 'Failed. An unexpected error occured',
+            'details': str(e)
+        }), 200
+    
+ # filter reviews
+@app.route('/filter-reviews/<review_status>', methods=['POST'])
+def filter_reviews(review_status):
+    try:
+        model = request.form.get('model')
+        make = request.form.get('make')
+        body = request.form.get('body')
+
+        all_reviews = []
+        
+        # Start with base query filtered by status
+        reviews_query = Reviews.query.filter_by(status=review_status)
+        
+        # Get all reviews with the specified status
+        reviews = reviews_query.all()
+        
+        total_rating = 0
+        count = 0
+
+        for review in reviews:
+            vehicle = Cars.query.filter_by(car_id=review.car_id).first()
+            
+            # Skip if vehicle doesn't exist
+            if not vehicle:
+                continue
+            
+            # Apply filters - skip review if it doesn't match the criteria
+            if make and str(vehicle.make) != str(make):
+                continue
+            
+            if model and vehicle.model_id and str(vehicle.model_id) != str(model):
+                continue
+            
+            if body and vehicle.body_style and str(vehicle.body_style) != str(body):
+                continue
+            
+            car_name = vehicle.name if vehicle else None
+
+            # review image
+            review_image = url_for(
+                'static',
+                filename=f'images/reviews/{review.image}',
+                _external=True
+            )
+
+            review_data = {
+                'review_id': review.review_id,
+                'title': review.title,
+                'rating': review.rating,
+                'reviewer': review.reviewer,
+                'date': review.date.isoformat(),
+                'review': review.text,
+                'image': review_image,
+                'status': review.status,
+                'car_id': review.car_id,
+                'car_name': car_name,
+            }
+
+            all_reviews.append(review_data)
+
+            if review.rating is not None:
+                total_rating += review.rating
+                count += 1
+
+        average_rating = total_rating / count if count > 0 else 0
+        return jsonify({
+            'success': True,
+            'reviews': all_reviews,
+            'average_rating': average_rating
+        })
+
+    except Exception as e:
+        print("Error at filter_reviews(): ", str(e))
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': 'Failed. An unexpected error occured',
+            'details': str(e)
+        }), 200

@@ -557,6 +557,7 @@ class Users(db.Model):
     password = db.Column(db.String(128))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_admin = db.Column(db.Boolean, default=False)
+    name = db.Column(db.String(50), default= "Drivate")
     
     def set_password(self, password):
         # Simple password storage (not secure - for development only)
@@ -571,7 +572,8 @@ class Users(db.Model):
             'id': self.id,
             'email': self.email,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'is_admin': self.is_admin
+            'is_admin': self.is_admin,
+            'name': self.name
         }
 
 class PasswordResets(db.Model):
