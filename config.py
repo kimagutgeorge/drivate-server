@@ -19,6 +19,17 @@ import uuid
 import secrets
 import string
 import json
+import random
+
+# SMTP configs
+import smtplib
+import base64
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+smtp_server = "smtp.gmail.com"  # Replace with your SMTP server
+smtp_port = 587  # Replace with your SMTP port
+password = "fqcy btct skpv wlxx"
+sender_email = "yako.mailer@gmail.com"
 
 # Initialize Flask app
 app = Flask(__name__)

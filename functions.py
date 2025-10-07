@@ -4494,3 +4494,169 @@ def filter_reviews(review_status):
             'error': 'Failed. An unexpected error occured',
             'details': str(e)
         }), 200
+
+# search faq
+@app.route('/search-faq/<search_input>', methods=['GET'])
+def search_faq(search_input):
+    try:
+        # Filter FAQs where faq_question matches the search_input (case-insensitive)
+        faqs = Faqs.query.filter(Faqs.question.ilike(f"%{search_input}%")).all()
+        faqs_list = []
+
+        for faq in faqs:
+            faq_dict = {
+                'faq_id': faq.faq_id,
+                'faq_question': faq.question,
+                'faq_answer': faq.answer,
+                'category_id': faq.category_id,
+                'category_name': faq.category_ref.category_name if faq.category_ref else None
+            }
+            faqs_list.append(faq_dict)
+
+        return jsonify({'success': True, 'faqs': faqs_list})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Failed to fetch faqs: {str(e)}'}), 500
+
+# search blog
+@app.route('/search-blog/<search_input>', methods=['GET'])
+def search_blog(search_input):
+
+    try:
+        # Get all blogs ordered by creation date (newest first)
+        blogs = Blogs.query.filter(Blogs.title.ilike(f"%{search_input}%")).all()
+        
+        # Convert to dictionary format
+        blogs_data = []
+       
+        for blog in blogs:
+            blog_dict = blog.to_dict()
+            
+            # Add full image URL if image exists
+            if blog_dict['image']:
+                blog_dict['image_url'] =  url_for('static', filename=f'images/blogs/{blog_dict['image']}', _external=True)
+            else:
+                blog_dict['image_url'] = None
+
+            if blog_dict['excerpt']:
+                blog_dict['excerpt'] = blog.excerpt
+
+            else:
+                blog_dict['excerpt'] = ""
+
+            if blog_dict['category']: 
+                cat_id = blog_dict['category']
+                category = Categories.query.filter_by(category_id = cat_id).first()
+                blog_dict['category'] = category.category_name
+            
+            else:
+                blog_dict['category'] = ""
+                
+            blogs_data.append(blog_dict)
+        
+        return jsonify({
+            'success': True,
+            'blogs': blogs_data,
+            'count': len(blogs_data)
+        }), 200
+        
+    except Exception as e:
+        print(f"Error fetching blogs: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to fetch blogs',
+            'message': str(e)
+        }), 500
+
+# forgot password
+@app.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    username = request.form.get('username')
+
+    if not username:
+        return jsonify({"message":"3"}), 200 # no credentials
+
+    user = Users.query.filter_by(email=username).first()
+
+    if user:
+        # send OTP here
+        otp = generate_otp()
+        subject = "Your OTP Code"
+        body = f"Your One-Time Password (OTP) is: {otp}\n\nIt is valid for 5 minutes."
+
+        send_email(username, subject, body)
+
+        # store in db
+        new_otp = OTPStore(username=username, otp=otp)
+        db.session.add(new_otp)
+        db.session.commit()
+
+        return jsonify({"message":"1"}), 200
+    else:
+        return jsonify({"message": "2"}), 200 # user does not exist
+
+
+# generate otp
+def generate_otp():
+    return str(random.randint(100000, 999999))
+# send OTP via email
+def send_email(to_email, subject, body):
+    try:
+        
+        # Create email
+        msg = MIMEMultipart()
+        msg['From'] = sender_email
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain'))
+
+        # Connect to server
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        server.login(sender_email, password)
+
+        # Send
+        server.sendmail(sender_email, to_email, msg.as_string())
+        server.quit()
+
+        return jsonify({"message": "1"}), 200
+    except Exception as e:
+        return jsonify({"message": "Error"}), 403
+        # return False, str(e)
+
+# verify otp
+@app.route('/verify-otp', methods=['POST'])
+def verify_otp():
+    try: 
+        username = request.form.get('username')
+        otp = request.form.get('otp')
+        password = request.form.get('password')
+
+
+        record = OTPStore.query.filter_by(username=username, otp=otp).first()
+
+        if record:
+            if record.is_expired:
+                db.session.delete(record)  # cleanup expired OTP
+                db.session.commit()
+                return jsonify({"message": "2"}), 200
+            
+            # Valid OTP
+            db.session.delete(record)  # remove after use
+            db.session.commit()
+            # save new password
+            user = Users.query.filter_by(email=username).first()
+
+            # Hash the password before saving
+            hashed_password = generate_password_hash(password)
+
+            user.password = hashed_password
+            db.session.commit()
+
+        # return response
+        return jsonify({"message": "1"}), 200
+    
+    except Exception as e:
+            print("Error is: ", str(e))
+            db.session.rollback()
+            return jsonify({"error": str(e)}), 400

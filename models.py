@@ -599,3 +599,16 @@ class PasswordResets(db.Model):
         }
 
 
+
+class OTPStore(db.Model):
+    __tablename__ = 'otp_store'
+
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(120), nullable=False)
+    otp = db.Column(db.String(6), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    @property
+    def is_expired(self):
+        """Check if OTP is older than 15 minutes"""
+        return datetime.utcnow() > self.created_at + timedelta(minutes=15)
